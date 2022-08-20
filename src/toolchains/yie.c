@@ -1,44 +1,49 @@
 #include <stdio.h>
+#include <string.h>
 #include "yie.h"
 
-int state = 0;
 uint16_t pc = 0;
-uint8_t  icode = 0;
-uint8_t  ifun = 0;
+uint8_t  icode, ifun, state = 0;
 uint64_t reg[15];
-uint64_t rA = 0;
-uint64_t rB = 0;
-uint64_t valA = 0;
-uint64_t valB = 0;
-uint64_t valC = 0;
-uint64_t valE = 0;
-uint64_t valM = 0;
-uint64_t valS = 0;
+uint64_t rA, rB, valA, valB, valC, valE, valM, valS = 0;
 uint16_t valP = 0;
-uint8_t  rom[] = {
-        0x30, 0xf4, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x80, 0x38, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x0d, 0x00, 0x0d, 0x00, 0x0d, 0x00, 0x00, 0x00,
-        0xc0, 0x00, 0xc0, 0x00, 0xc0, 0x00, 0x00, 0x00,
-        0x00, 0x0b, 0x00, 0x0b, 0x00, 0x0b, 0x00, 0x00,
-        0x00, 0xa0, 0x00, 0xa0, 0x00, 0xa0, 0x00, 0x00,
-        0x30, 0xf7, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x30, 0xf6, 0x04, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x80, 0x56, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x63, 0x00,
-        0x62, 0x66, 0x70, 0x83, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x50, 0xa7, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0xa0, 0xc0,
-        0xf7, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0xc0, 0xf6, 0xff, 0xff, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0xff, 0x74, 0x63, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x90
-};
+uint8_t  memory[MEM_SIZE];
 
-int main() {
+int main(int argc, char *argv[]) {
+    FILE *fp = fopen(argv[1],"r");
+
+    if (fp == NULL) {
+        printf("No such file!\n");
+        return -1;
+    }
+
+    fgets (memory, MEM_SIZE, fp);
+
+    for (int i = 0; i < MEM_SIZE; ++i) {
+        if ('0' <= memory[i] && memory[i] <= '9')
+            memory[i] = memory[i] - '0';
+        else if ('a' <= memory[i] && memory[i] <= 'f')
+            memory[i] = memory[i] - 'a' + 10;
+    }
+
+    for (int i = 0; i < MEM_SIZE; i = i + 2) {
+        memory[i] = memory[i] << 4;
+        memory[i] = memory[i] | memory[i + 1];
+    }
+
+    unsigned sign = 0;
+    for (int i = 0; i < MEM_SIZE; i++) {
+        if ((i % 2) == 0) {
+            memory[sign] = memory[i];
+            sign++;
+        }
+    }
+
+    fclose(fp);
+
+    pc = 0;
     while (1) {
-        fetch(rom[pc]);
+        fetch(memory[pc]);
         decode();
         execute();
         readMemory();
@@ -46,6 +51,7 @@ int main() {
         updatePC();
         if (state) break;
     }
+
     return 0;
 }
 
@@ -54,51 +60,51 @@ void fetch(uint8_t icode_ifun) {
     ifun  =  icode_ifun & 0x0f;
 
     switch (icode) {
-        case op:     { printf("fetch op\n");    rA = rom[pc + 1] & 0xf0 >> 4; rB = rom[pc + 1] & 0x0f; valP = pc + 2; break; }
-        case pushq:  { printf("fetch pushq\n"); rA = rom[pc + 1] & 0xf0 >> 4;                          valP = pc + 2; break; }
-        case popq:   { printf("fetch popq\n");  rA = rom[pc + 1] & 0xf0 >> 4;                          valP = pc + 2; break; }
+        case op:     { printf("fetch op\n");    rA = memory[pc + 1] & 0xf0 >> 4; rB = memory[pc + 1] & 0x0f; valP = pc + 2; break; }
+        case pushq:  { printf("fetch pushq\n"); rA = memory[pc + 1] & 0xf0 >> 4;                          valP = pc + 2; break; }
+        case popq:   { printf("fetch popq\n");  rA = memory[pc + 1] & 0xf0 >> 4;                          valP = pc + 2; break; }
         case ret:    { printf("fetch ret\n");                                                          valP = pc + 1; break; }
         case halt:   { printf("fetch halt\n");                                                         valP = pc + 1; break; }
         case nop:    { printf("fetch nop\n");                                                          valP = pc + 1; break; }
         case jxx:    {
             printf("fetch jxx\n");
-            valC = eightRomBytes2bigValue(pc + 1);
+            valC = eightRamBytes2bigValue(pc + 1);
             valP = pc + 9;
             break;
         }
         case call:   {
             printf("fetch call\n");
-            valC = eightRomBytes2bigValue(pc + 1);
+            valC = eightRamBytes2bigValue(pc + 1);
             valP = pc + 9;
             break;
         }
         case irmovl: {
             printf("fetch irmovl\n");
-            rB   =  rom[pc + 1] & 0x0f;
-            valC = eightRomBytes2bigValue(pc + 2);
+            rB   =  memory[pc + 1] & 0x0f;
+            valC = eightRamBytes2bigValue(pc + 2);
             valP = pc + 10;
             break;
         }
         case rmmovl: {
             printf("fetch rmmovl\n");
-            rA = rom[pc + 1] & 0xf0 >> 4;
-            rB = rom[pc + 1] & 0x0f;
-            valC = eightRomBytes2bigValue(pc + 2);
+            rA = memory[pc + 1] & 0xf0 >> 4;
+            rB = memory[pc + 1] & 0x0f;
+            valC = eightRamBytes2bigValue(pc + 2);
             valP = pc + 10;
             break;
         }
         case mrmovl: {
             printf("fetch mrmovl\n");
-            rA = rom[pc + 1] & 0xf0 >> 4;
-            rB = rom[pc + 1] & 0x0f;
-            valC = eightRomBytes2bigValue(pc + 2);
+            rA = memory[pc + 1] & 0xf0 >> 4;
+            rB = memory[pc + 1] & 0x0f;
+            valC = eightRamBytes2bigValue(pc + 2);
             valP = pc + 10;
             break;
         }
         case cmovxx: {
             printf("fetch cmovxx\n");
-            rA = rom[pc + 1] & 0xf0 >> 4;
-            rB = rom[pc + 1] & 0x0f;
+            rA = memory[pc + 1] & 0xf0 >> 4;
+            rB = memory[pc + 1] & 0x0f;
             valP = pc + 2;
             break;
         }
@@ -108,12 +114,12 @@ void fetch(uint8_t icode_ifun) {
 
 void decode() {
     switch (icode) {
-        case mrmovl: { printf("decode mrmovl\n"); valB = rB;                        break; }
-        case cmovxx: { printf("decode cmovxx\n"); valA = rA;                        break; }
+        case mrmovl: { printf("decode mrmovl\n"); valB = reg[rB];                   break; }
+        case cmovxx: { printf("decode cmovxx\n"); valA = reg[rA];                   break; }
         case call:   { printf("decode call\n");   valB = reg[rsp];                  break; }
-        case rmmovl: { printf("decode rmmovl\n"); valA = rA;       valB = rB;       break; }
-        case op:     { printf("decode op\n");     valA = rA;       valB = rB;       break; }
-        case pushq:  { printf("decode pushq\n");  valA = rA;       valB = reg[rsp]; break; }
+        case rmmovl: { printf("decode rmmovl\n"); valA = reg[rA];  valB = reg[rB];  break; }
+        case op:     { printf("decode op\n");     valA = reg[rA];  valB = reg[rB];  break; }
+        case pushq:  { printf("decode pushq\n");  valA = reg[rA];  valB = reg[rsp]; break; }
         case popq:   { printf("decode popq\n");   valA = reg[rsp]; valB = reg[rsp]; break; }
         case ret:    { printf("decode ret\n");    valA = reg[rsp]; valB = reg[rsp]; break; }
         case halt:   { printf("decode halt\n");                                     break; }
@@ -128,23 +134,172 @@ void execute() {
     switch (icode) {
         case op: {
             switch (ifun) {
-                case addq: { printf("execute addq\n"); valE = valB + valA; break; } // TODO: Set CC
-                case subq: { printf("execute subq\n"); valE = valB - valA; break; } // TODO: Set CC
-                case andq: { printf("execute andq\n"); valE = valB & valA; break; } // TODO: Set CC
-                case xorq: { printf("execute xorq\n"); valE = valB ^ valA; break; } // TODO: Set CC
+                case addq: {
+                    printf("execute addq\n");
+                    valE = valB + valA;
+                    if (valB + valA > 0xffffffffffffffff) {
+                        printf("overflow\n");
+                        reg[OF] = 1;
+                    } else if (valB + valA < 0) {
+                        printf("underflow\n");
+                        reg[SF] = 1;
+                    } else if (valB + valA == 0) {
+                        printf("zero\n");
+                        reg[ZF] = 1;
+                    }
+                    break;
+                }
+                case subq: {
+                    printf("execute subq\n");
+                    valE = valB - valA;
+                    if (valB - valA > 0xffffffffffffffff) {
+                        printf("overflow\n");
+                        reg[OF] = 1;
+                    } else if (valB - valA < 0) {
+                        printf("underflow\n");
+                        reg[SF] = 1;
+                    } else if (valB - valA == 0) {
+                        printf("zero\n");
+                        reg[ZF] = 1;
+                    }
+                    break;
+                }
+                case andq: {
+                    printf("execute andq\n");
+                    valE = valB & valA;
+                    if ((valB & valA) > 0xffffffffffffffff) {
+                        printf("overflow\n");
+                        reg[OF] = 1;
+                    } else if ((valB & valA) < 0) {
+                        printf("underflow\n");
+                        reg[SF] = 1;
+                    } else if ((valB & valA) == 0) {
+                        printf("zero\n");
+                        reg[ZF] = 1;
+                    }
+                    break;
+                }
+                case xorq: {
+                    printf("execute xorq\n");
+                    valE = valB ^ valA;
+                    if ((valB ^ valA) > 0xffffffffffffffff) {
+                        printf("overflow\n");
+                        reg[OF] = 1;
+                    } else if ((valB ^ valA) < 0) {
+                        printf("underflow\n");
+                        reg[SF] = 1;
+                    } else if ((valB ^ valA) == 0) {
+                        printf("zero\n");
+                        reg[ZF] = 1;
+                    }
+                    break;
+                }
             }
+            break;
         }
         case pushq:  { printf("execute pushq\n");  valE = valB - 8;    break; }
         case popq:   { printf("execute popq\n");   valE = valB + 8;    break; }
         case ret:    { printf("execute ret\n");    valE = valB + 8;    break; }
         case halt:   { printf("execute halt\n");   state = 1;          break; }
         case nop:    { printf("execute nop\n");                        break; }
-        case jxx:    { printf("execute jxx\n");                        break; } // TODO: Cnd <- Cond(CC, ifun)
+        case jxx:    {
+            switch (ifun) {
+                case jmp: { printf("execute jmp\n"); reg[Cnd] = 1; break; }
+                case jle: { printf("execute jle\n");
+                    if ((reg[SF] ^ reg[OF]) || reg[ZF]) {
+                        reg[Cnd] = 1;
+                    }
+                    break;
+                }
+                case jl: {
+                    printf("execute jl\n");
+                    if (reg[SF] ^ reg[OF]) {
+                        reg[Cnd] = 1;
+                    }
+                    break;
+                }
+                case jge: {
+                    printf("execute jge\n");
+                    if (~(reg[SF] ^ reg[OF])) {
+                        reg[Cnd] = 1;
+                    }
+                    break;
+                }
+                case jg: {
+                    printf("execute jg\n");
+                    if (!(reg[SF] ^ reg[OF]) & !reg[ZF]) {
+                        reg[Cnd] = 1;
+                    }
+                    break;
+                }
+                case je: {
+                    printf("execute je\n");
+                    if (reg[ZF]) {
+                        reg[Cnd] = 1;
+                    }
+                    break;
+                }
+                case jne: {
+                    printf("execute jne\n");
+                    if (!reg[ZF]) {
+                        reg[Cnd] = 1;
+                    }
+                    break;
+                }
+            }
+            break;
+        }
         case call:   { printf("execute call\n");   valE = valB - 8;    break; }
         case irmovl: { printf("execute irmovl\n"); valE = valC;        break; }
         case rmmovl: { printf("execute rmmovl\n"); valE = valB + valC; break; }
         case mrmovl: { printf("execute mrmovl\n"); valE = valB + valC; break; }
-        case cmovxx: { printf("execute cmovxx\n"); valE = valA;        break; }
+        case cmovxx: {
+            switch (ifun) {
+                case rrmovl: { printf("execute rrmovl\n"); valE = valA; ; break; }
+                case cmovle: { printf("execute cmovle\n");
+                    if ((reg[SF] ^ reg[OF]) || reg[ZF]) {
+                        valE = valA;
+                    }
+                    break;
+                }
+                case cmovl: {
+                    printf("execute cmovl\n");
+                    if (reg[SF] ^ reg[OF]) {
+                        valE = valA;
+                    }
+                    break;
+                }
+                case cmovge: {
+                    printf("execute cmovge\n");
+                    if (~(reg[SF] ^ reg[OF])) {
+                        valE = valA;
+                    }
+                    break;
+                }
+                case cmovg: {
+                    printf("execute cmovg\n");
+                    if (!(reg[SF] ^ reg[OF]) & !reg[ZF]) {
+                        valE = valA;
+                    }
+                    break;
+                }
+                case cmove: {
+                    printf("execute cmove\n");
+                    if (reg[ZF]) {
+                        valE = valA;
+                    }
+                    break;
+                }
+                case cmovne: {
+                    printf("execute cmovne\n");
+                    if (!reg[ZF]) {
+                        valE = valA;
+                    }
+                    break;
+                }
+            }
+            break;
+        }
     }
 }
 
@@ -153,34 +308,34 @@ void readMemory() {
         case pushq:  {
             printf("readMemory pushq\n");
             bigEndian2smailEndian(valE);
-            smailValue2eightRomBytes(valS, valE);
+            smailValue2eightRamBytes(valS, valE);
             break;
         }
         case popq:   {
             printf("readMemory popq\n");
-            valE = eightRomBytes2bigValue(valA);
+            valE = eightRamBytes2bigValue(valA);
             break;
         }
         case ret:    {
             printf("readMemory ret\n");
-            valM = eightRomBytes2bigValue(valA);
+            valM = eightRamBytes2bigValue(valA);
             break;
         }
         case call:   {
             printf("readMemory call\n");
-            bigEndian2smailEndian(valE);
-            smailValue2eightRomBytes(valS, valE);
+            bigEndian2smailEndian(valP);
+            smailValue2eightRamBytes(valS, valE);
             break;
         }
         case rmmovl: {
             printf("readMemory rmmovl\n");
             bigEndian2smailEndian(valE);
-            smailValue2eightRomBytes(valS, valE);
+            smailValue2eightRamBytes(valS, valE);
             break;
         }
         case mrmovl: {
             printf("readMemory mrmovl\n");
-            valM = eightRomBytes2bigValue(valA);
+            valM = eightRamBytes2bigValue(valA);
             break;
         }
     }
@@ -190,52 +345,43 @@ void writeMemory() {
     switch (icode) {
         case op: {
             printf("writeMemory op\n");
-            bigEndian2smailEndian(valE);
-            reg[rax] = valS;
+            reg[rB] = valE;
             break;
         }
         case pushq: {
             printf("writeMemory pushq\n");
-            bigEndian2smailEndian(valE);
-            reg[rsp] = valS;
+            reg[rsp] = valE;
             break;
         }
         case popq: {
             printf("writeMemory popq\n");
-            bigEndian2smailEndian(valE);
-            reg[rsp] = valS;
-            bigEndian2smailEndian(valM);
-            reg[rax] = valM;
+            reg[rsp] = valE;
+            reg[rA] = valM;
             break;
         }
         case call: {
             printf("writeMemory call\n");
-            bigEndian2smailEndian(valE);
-            reg[rsp] = valS;
+            reg[rsp] = valE;
             break;
         }
         case ret: {
             printf("writeMemory ret\n");
-            bigEndian2smailEndian(valE);
-            reg[rsp] = valS;
+            reg[rsp] = valE;
             break;
         }
         case cmovxx: {
             printf("writeMemory cmovxx\n");
-            bigEndian2smailEndian(valE);
-            reg[rax] = valS;
+            reg[rB] = valE;
             break;
         }
         case irmovl: {
             printf("writeMemory irmovl\n");
-            bigEndian2smailEndian(valE);
-            reg[rax] = valS;
+            reg[rB] = valE;
             break;
         }
         case mrmovl: {
             printf("writeMemory mrmovl\n");
-            bigEndian2smailEndian(valM);
-            reg[rax] = valS;
+            reg[rA] = valM;
             break;
         }
     }
@@ -266,28 +412,35 @@ void updatePC() {
         }
         case jxx: {
             printf("updatePC, pc = Cnd ? valC : valP\n");
-            // pc = Cnd ? valC : valP;
+            pc = reg[Cnd] ? valC : valP;
             break;
         }
     }
 }
 
-uint64_t bigEndian2smailEndian(uint64_t valB) {
-    valS = valB << 56 | valB << 48 | valB << 40 | valB << 32 | valB << 24 | valB << 16 | valB << 8 | valB;
+void bigEndian2smailEndian(uint64_t valB) {
+    valS = valB << 56 & 0xFF00000000000000 |
+           valB << 40 & 0x00FF000000000000 |
+           valB << 24 & 0x0000FF0000000000 |
+           valB << 8  & 0x000000FF00000000 |
+           valB >> 8  & 0x00000000FF000000 |
+           valB >> 24 & 0x0000000000FF0000 |
+           valB >> 40 & 0x000000000000FF00 |
+           valB >> 56 & 0x00000000000000FF;
 }
 
-void smailValue2eightRomBytes(uint64_t valS, uint64_t valE) {
-    rom[valE]   = (valS & 0xff00000000000000) >> 56;
-    rom[valE+1] = (valS & 0x00ff000000000000) >> 48;
-    rom[valE+2] = (valS & 0x0000ff0000000000) >> 40;
-    rom[valE+3] = (valS & 0x000000ff00000000) >> 32;
-    rom[valE+4] = (valS & 0x00000000ff000000) >> 24;
-    rom[valE+5] = (valS & 0x0000000000ff0000) >> 16;
-    rom[valE+6] = (valS & 0x000000000000ff00) >> 8 ;
-    rom[valE+7] =  valS & 0x00000000000000ff;
+void smailValue2eightRamBytes(uint64_t valS, uint64_t valE) {
+    memory[valE]   = (valS & 0xff00000000000000) >> 56;
+    memory[valE+1] = (valS & 0x00ff000000000000) >> 48;
+    memory[valE+2] = (valS & 0x0000ff0000000000) >> 40;
+    memory[valE+3] = (valS & 0x000000ff00000000) >> 32;
+    memory[valE+4] = (valS & 0x00000000ff000000) >> 24;
+    memory[valE+5] = (valS & 0x0000000000ff0000) >> 16;
+    memory[valE+6] = (valS & 0x000000000000ff00) >> 8 ;
+    memory[valE+7] =  valS & 0x00000000000000ff;
 }
 
-uint64_t eightRomBytes2bigValue(uint16_t pc) {
-    uint64_t val = rom[pc+7] << 56 | rom[pc+6] << 48 | rom[pc+5] << 40 | rom[pc+4] << 32 | rom[pc+3] << 24 | rom[pc+2] << 16 | rom[pc+1] << 8 | rom[pc];
+uint64_t eightRamBytes2bigValue(uint16_t pc) {
+    uint64_t val = memory[pc+7] << 56 | memory[pc+6] << 48 | memory[pc+5] << 40 | memory[pc+4] << 32 | memory[pc+3] << 24 | memory[pc+2] << 16 | memory[pc+1] << 8 | memory[pc];
     return val;
 }

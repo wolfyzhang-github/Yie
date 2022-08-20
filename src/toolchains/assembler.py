@@ -27,7 +27,7 @@ def write(txt):
             file.write(eachchar)
             i = i + 1
             if i % 2 == 0:
-                # file.write(' ')
+                file.write('')
                 i = 0
         # file.write('\n')
     file.close()

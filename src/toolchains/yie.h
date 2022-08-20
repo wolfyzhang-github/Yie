@@ -8,17 +8,19 @@
 #define INS 1
 #define AOK 0
 
+#define MEM_SIZE 1024
+
 void fetch(uint8_t icode_ifun);
 void decode();
 void execute();
 void readMemory();
 void writeMemory();
 void updatePC();
-uint64_t bigEndian2smailEndian(uint64_t val);
-void smailValue2eightRomBytes(uint64_t valS, uint64_t valE);
-uint64_t eightRomBytes2bigValue(uint16_t pc);
+void bigEndian2smailEndian(uint64_t val);
+void smailValue2eightRamBytes(uint64_t valS, uint64_t valE);
+uint64_t eightRamBytes2bigValue(uint16_t pc);
 
-/* icode*/
+
 #define halt   0x0
 #define nop    0x1
 #define cmovxx 0x2
@@ -44,6 +46,7 @@ uint64_t eightRomBytes2bigValue(uint16_t pc);
 #define jne    0x4
 #define jge    0x5
 #define jg     0x6
+#define rrmovl 0x0
 #define cmovle 0x1
 #define cmovl  0x2
 #define cmove  0x3
@@ -54,6 +57,7 @@ uint64_t eightRomBytes2bigValue(uint16_t pc);
 #define rax    0x0
 #define rcx    0x1
 #define rdx    0x2
+#define rbx    0x3
 #define rsp    0x4
 #define rbp    0x5
 #define rsi    0x6
@@ -65,5 +69,10 @@ uint64_t eightRomBytes2bigValue(uint16_t pc);
 #define r12    0xc
 #define r13    0xd
 #define r14    0xe
+
+#define ZF     0xa
+#define SF     0xb
+#define OF     0xc
+#define Cnd    0xd
 
 #endif
