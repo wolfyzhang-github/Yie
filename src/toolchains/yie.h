@@ -19,6 +19,7 @@ void updatePC();
 void bigEndian2smailEndian(uint64_t val);
 void smailValue2eightRamBytes(uint64_t valS, uint64_t valE);
 uint64_t eightRamBytes2bigValue(uint16_t pc);
+void setCC(char op);
 
 
 #define halt   0x0
@@ -70,9 +71,17 @@ uint64_t eightRamBytes2bigValue(uint16_t pc);
 #define r13    0xd
 #define r14    0xe
 
-#define ZF     0xa
-#define SF     0xb
-#define OF     0xc
-#define Cnd    0xd
+#define COLOR_NONE "\033[0m"
+#define RED        "\033[1;31m"
+#define GREEN      "\033[1;32m"
+#define YELLOW     "\033[1;33m"
+#define BLUE       "\033[1;34m"
+#define PURPLE     "\033[1;35m"
+#define DGREEN     "\033[1;36m"
+#define BOLD       "\033[1;37m"
+
+#define TITLE      "\033[1;;40m"
+#define STATE      "\033[1;31;43m"
+
 
 #endif

@@ -8,6 +8,7 @@ uint64_t reg[15];
 uint64_t rA, rB, valA, valB, valC, valE, valM, valS = 0;
 uint16_t valP = 0;
 uint8_t  memory[MEM_SIZE];
+uint8_t  ZF, SF, OF, Cnd;
 
 int main(int argc, char *argv[]) {
     FILE *fp = fopen(argv[1],"r");
@@ -42,13 +43,18 @@ int main(int argc, char *argv[]) {
     fclose(fp);
 
     pc = 0;
-    while (1) {
+    for (int i = 0; ; ++i) {
+        printf("\n"TITLE"No.%d cycle:"COLOR_NONE"\n", i+1);
         fetch(memory[pc]);
         decode();
         execute();
         readMemory();
         writeMemory();
         updatePC();
+        if (i == MEM_SIZE) {
+            state = HLT;
+            printf("\n"STATE"Suspected dead cycle, please check your program!"COLOR_NONE"\n");
+        }
         if (state) break;
     }
 
@@ -60,33 +66,71 @@ void fetch(uint8_t icode_ifun) {
     ifun  =  icode_ifun & 0x0f;
 
     switch (icode) {
-        case op:     { printf("fetch op\n");    rA = memory[pc + 1] & 0xf0 >> 4; rB = memory[pc + 1] & 0x0f; valP = pc + 2; break; }
-        case pushq:  { printf("fetch pushq\n"); rA = memory[pc + 1] & 0xf0 >> 4;                          valP = pc + 2; break; }
-        case popq:   { printf("fetch popq\n");  rA = memory[pc + 1] & 0xf0 >> 4;                          valP = pc + 2; break; }
-        case ret:    { printf("fetch ret\n");                                                          valP = pc + 1; break; }
-        case halt:   { printf("fetch halt\n");                                                         valP = pc + 1; break; }
-        case nop:    { printf("fetch nop\n");                                                          valP = pc + 1; break; }
-        case jxx:    {
-            printf("fetch jxx\n");
+        case op: {
+            printf(YELLOW"fetch op:\t"COLOR_NONE"    ");
+            printf("rA = %lu; rB = %lu; valP = %hu\n", rA, rB, valP);
+            rA = (memory[pc + 1] & 0xf0) >> 4;
+            rB = (memory[pc + 1]) & 0x0f;
+            valP = pc + 2;
+            break;
+        }
+        case pushq: {
+            printf(YELLOW"fetch pushq:\t"COLOR_NONE"    ");
+            printf("rA = %lu; valP = %hu\n", rA, valP);
+            rA = (memory[pc + 1] & 0xf0) >> 4;
+            valP = pc + 2;
+            break;
+        }
+        case popq: {
+            printf(YELLOW"fetch popq:\t"COLOR_NONE"    ");
+            printf("rA = %lu; valP = %hu\n", rA, valP);
+            rA = (memory[pc + 1] & 0xf0) >> 4;
+            valP = pc + 2;
+            break;
+        }
+        case ret: {
+            printf(YELLOW"fetch ret:\t"COLOR_NONE"    ");
+            printf("rA = %lu; valP = %hu\n", rA, valP);
+            valP = pc + 1;
+            break;
+        }
+        case halt: {
+            printf(RED"fetch halt:\t"COLOR_NONE"    ");
+            printf("valP = %hu\n", valP);
+            valP = pc + 1;
+            break;
+        }
+        case nop: {
+            printf(YELLOW"fetch nop:\t"COLOR_NONE"    ");
+            printf("valP = %hu\n", valP);
+            valP = pc + 1;
+            break;
+        }
+        case jxx: {
+            printf(YELLOW"fetch jxx:\t"COLOR_NONE"    ");
+            printf("valC = %lu; valP = %hu\n", valC, valP);
             valC = eightRamBytes2bigValue(pc + 1);
             valP = pc + 9;
             break;
         }
         case call:   {
-            printf("fetch call\n");
+            printf(YELLOW"fetch call:\t"COLOR_NONE"    ");
+            printf("valC = %lu; valP = %hu\n", valC, valP);
             valC = eightRamBytes2bigValue(pc + 1);
             valP = pc + 9;
             break;
         }
         case irmovl: {
-            printf("fetch irmovl\n");
+            printf(YELLOW"fetch irmovl:\t"COLOR_NONE"    ");
+            printf("rB = %lu; valC = %lu; valP = %hu\n", rB, valC, valP);
             rB   =  memory[pc + 1] & 0x0f;
             valC = eightRamBytes2bigValue(pc + 2);
             valP = pc + 10;
             break;
         }
         case rmmovl: {
-            printf("fetch rmmovl\n");
+            printf(YELLOW"fetch rmmovl:\t"COLOR_NONE"    ");
+            printf("rA = %lu; rB = %lu; valC = %lu; valP = %hu\n", rA, rB, valC, valP);
             rA = memory[pc + 1] & 0xf0 >> 4;
             rB = memory[pc + 1] & 0x0f;
             valC = eightRamBytes2bigValue(pc + 2);
@@ -94,7 +138,8 @@ void fetch(uint8_t icode_ifun) {
             break;
         }
         case mrmovl: {
-            printf("fetch mrmovl\n");
+            printf(YELLOW"fetch mrmovl:\t"COLOR_NONE"    ");
+            printf("rA = %lu; rB = %lu; valC = %lu; valP = %hu\n", rA, rB, valC, valP);
             rA = memory[pc + 1] & 0xf0 >> 4;
             rB = memory[pc + 1] & 0x0f;
             valC = eightRamBytes2bigValue(pc + 2);
@@ -102,31 +147,89 @@ void fetch(uint8_t icode_ifun) {
             break;
         }
         case cmovxx: {
-            printf("fetch cmovxx\n");
+            printf(YELLOW"fetch cmovxx:\t"COLOR_NONE"    ");
+            printf("rA = %lu; rB = %lu; valP = %hu\n", rA, rB, valP);
             rA = memory[pc + 1] & 0xf0 >> 4;
             rB = memory[pc + 1] & 0x0f;
             valP = pc + 2;
             break;
         }
-        default:     { printf("fetch error\n"); state = 1; break; }
+        default: { printf(STATE"fetch error! state = INS!"COLOR_NONE"\n"); state = INS; break; }
     }
 }
 
 void decode() {
     switch (icode) {
-        case mrmovl: { printf("decode mrmovl\n"); valB = reg[rB];                   break; }
-        case cmovxx: { printf("decode cmovxx\n"); valA = reg[rA];                   break; }
-        case call:   { printf("decode call\n");   valB = reg[rsp];                  break; }
-        case rmmovl: { printf("decode rmmovl\n"); valA = reg[rA];  valB = reg[rB];  break; }
-        case op:     { printf("decode op\n");     valA = reg[rA];  valB = reg[rB];  break; }
-        case pushq:  { printf("decode pushq\n");  valA = reg[rA];  valB = reg[rsp]; break; }
-        case popq:   { printf("decode popq\n");   valA = reg[rsp]; valB = reg[rsp]; break; }
-        case ret:    { printf("decode ret\n");    valA = reg[rsp]; valB = reg[rsp]; break; }
-        case halt:   { printf("decode halt\n");                                     break; }
-        case nop:    { printf("decode nop\n");                                      break; }
-        case jxx:    { printf("decode jxx\n");                                      break; }
-        case irmovl: { printf("decode irmovl\n");                                   break; }
-        default:     { printf("decode error\n");  state = 1;                        break; }
+        case mrmovl: {
+            valB = reg[rB];
+            printf(BLUE"decode mrmovl:\t"COLOR_NONE"    ");
+            printf("valB = reg[%lu] = %lu\n", rB, valB);
+            break;
+        }
+        case cmovxx: {
+            valA = reg[rA];
+            printf(BLUE"decode cmovxx:\t"COLOR_NONE"    ");
+            printf("valA = reg[%lu] = %lu\n", rA, valA);
+            break;
+        }
+        case call: {
+            valB = reg[rsp];
+            printf(BLUE"decode call:\t"COLOR_NONE"    ");
+            printf("valB = reg[%d] = %lu\n", rsp, valB);
+            break;
+        }
+        case rmmovl: {
+            valA = reg[rA];
+            valB = reg[rB];
+            printf(BLUE"decode rmmovl:\t"COLOR_NONE"    ");
+            printf("valA = reg[%lu] = %lu; valB = reg[%lu] = %lu\n", rA, valA, rB, valB);
+            break;
+        }
+        case op: {
+            valA = reg[rA];
+            valB = reg[rB];
+            printf(BLUE"decode op:\t"COLOR_NONE"    ");
+            printf("valA = reg[%lu] = %lu; valB = reg[%lu] = %lu\n", rA, valA, rB, valB);
+            break;
+        }
+        case pushq: {
+            valA = reg[rA];
+            valB = reg[rsp];
+            printf(BLUE"decode pushq:\t"COLOR_NONE"    ");
+            printf("valA = reg[%lu] = %lu; valB = reg[%d] = %lu\n", rA, valA, rsp, valB);
+            break;
+        }
+        case popq: {
+            valA = reg[rsp];
+            valB = reg[rsp];
+            printf(BLUE"decode popq:\t"COLOR_NONE"    ");
+            printf("valA = reg[%d] = %lu; valB = reg[%d] = %lu\n", rsp, valA, rsp, valB);
+            break;
+        }
+        case ret: {
+            valA = reg[rsp];
+            valB = reg[rsp];
+            printf(BLUE"decode ret:\t"COLOR_NONE"    ");
+            printf("valA = reg[%d] = %lu; valB = reg[%d] = %lu\n", rsp, valA, rsp, valB);
+            break;
+        }
+        case halt: {
+            printf(RED"decode halt\n"COLOR_NONE);
+            break;
+        }
+        case nop: {
+            printf(BLUE"decode nop\n"COLOR_NONE);
+            break;
+        }
+        case jxx: {
+            printf(BLUE"decode jxx\n"COLOR_NONE);
+            break;
+        }
+        case irmovl: {
+            printf(BLUE"decode irmovl\n"COLOR_NONE);
+            break;
+        }
+        default: { state = INS; printf(STATE"decode error! state = INS!"COLOR_NONE"\n");   break; }
     }
 }
 
@@ -135,166 +238,224 @@ void execute() {
         case op: {
             switch (ifun) {
                 case addq: {
-                    printf("execute addq\n");
                     valE = valB + valA;
-                    if (valB + valA > 0xffffffffffffffff) {
-                        printf("overflow\n");
-                        reg[OF] = 1;
-                    } else if (valB + valA < 0) {
-                        printf("underflow\n");
-                        reg[SF] = 1;
-                    } else if (valB + valA == 0) {
-                        printf("zero\n");
-                        reg[ZF] = 1;
-                    }
+                    if (valB + valA > 0xffffffffffffffff)   { OF = 1; } else { OF = 0; }
+                    if (valB + valA < 0)                    { SF = 1; } else { SF = 0; }
+                    if (valB + valA == 0)                   { ZF = 1; } else { ZF = 0; }
+                    printf(GREEN"execute addq:\t"COLOR_NONE"    ");
+                    printf("valE = %lu; valA = %lu; valB = %lu;", valE, valA, valB);
+                    printf(" OF = %d; SF = %d; ZF = %d\n", OF, SF, ZF);
                     break;
                 }
                 case subq: {
-                    printf("execute subq\n");
                     valE = valB - valA;
-                    if (valB - valA > 0xffffffffffffffff) {
-                        printf("overflow\n");
-                        reg[OF] = 1;
-                    } else if (valB - valA < 0) {
-                        printf("underflow\n");
-                        reg[SF] = 1;
-                    } else if (valB - valA == 0) {
-                        printf("zero\n");
-                        reg[ZF] = 1;
-                    }
+                    if (valB - valA > 0xffffffffffffffff)   { OF = 1; } else { OF = 0; }
+                    if (valB - valA < 0)                    { SF = 1; } else { SF = 0; }
+                    if (valB - valA == 0)                   { ZF = 1; } else { ZF = 0; }
+                    printf(GREEN"execute subq:\t"COLOR_NONE"    ");
+                    printf("valE = %lu; valA = %lu; valB = %lu;", valE, valA, valB);
+                    printf(" OF = %d; SF = %d; ZF = %d\n", OF, SF, ZF);
                     break;
                 }
                 case andq: {
-                    printf("execute andq\n");
                     valE = valB & valA;
-                    if ((valB & valA) > 0xffffffffffffffff) {
-                        printf("overflow\n");
-                        reg[OF] = 1;
-                    } else if ((valB & valA) < 0) {
-                        printf("underflow\n");
-                        reg[SF] = 1;
-                    } else if ((valB & valA) == 0) {
-                        printf("zero\n");
-                        reg[ZF] = 1;
-                    }
+                    if ((valB & valA) > 0xffffffffffffffff) { OF = 1; } else { OF = 0; }
+                    if ((valB & valA) < 0)                  { SF = 1; } else { SF = 0; }
+                    if ((valB & valA) == 0)                 { ZF = 1; } else { ZF = 0; }
+                    printf(GREEN"execute andq:\t"COLOR_NONE"    ");
+                    printf("valE = %lu; valA = %lu; valB = %lu", valE, valA, valB);
+                    printf(" OF = %d; SF = %d; ZF = %d\n", OF, SF, ZF);
                     break;
                 }
                 case xorq: {
-                    printf("execute xorq\n");
                     valE = valB ^ valA;
-                    if ((valB ^ valA) > 0xffffffffffffffff) {
-                        printf("overflow\n");
-                        reg[OF] = 1;
-                    } else if ((valB ^ valA) < 0) {
-                        printf("underflow\n");
-                        reg[SF] = 1;
-                    } else if ((valB ^ valA) == 0) {
-                        printf("zero\n");
-                        reg[ZF] = 1;
-                    }
+                    if ((valB ^ valA) > 0xffffffffffffffff) { OF = 1; } else { OF = 0; }
+                    if ((valB ^ valA) < 0)                  { SF = 1; } else { SF = 0; }
+                    if ((valB ^ valA) == 0)                 { ZF = 1; } else { ZF = 0; }
+                    printf(GREEN"execute xorq:\t"COLOR_NONE"    ");
+                    printf("valE = %lu; valA = %lu; valB = %lu", valE, valA, valB);
+                    printf(" OF = %d; SF = %d; ZF = %d\n", OF, SF, ZF);
                     break;
                 }
             }
             break;
         }
-        case pushq:  { printf("execute pushq\n");  valE = valB - 8;    break; }
-        case popq:   { printf("execute popq\n");   valE = valB + 8;    break; }
-        case ret:    { printf("execute ret\n");    valE = valB + 8;    break; }
-        case halt:   { printf("execute halt\n");   state = 1;          break; }
-        case nop:    { printf("execute nop\n");                        break; }
-        case jxx:    {
+        case pushq: {
+            valE = valB - 8;
+            printf(GREEN"execute pushq:\t"COLOR_NONE"    ");
+            printf("valE = %lu; valB = %lu\n", valE, valB);
+            break;
+        }
+        case popq: {
+            valE = valB + 8;
+            printf(GREEN"execute popq:\t"COLOR_NONE"    ");
+            printf("valE = %lu; valB = %lu\n", valE, valB);
+            break;
+        }
+        case ret: {
+            valE = valB + 8;
+            printf(GREEN"execute ret\n"COLOR_NONE);
+            break;
+        }
+        case halt: {
+            state = HLT;
+            printf(RED"execute halt\t"COLOR_NONE"    ");
+            printf(STATE"state = HLT"COLOR_NONE"\n");
+            break;
+        }
+        case nop: {
+            printf(GREEN"execute nop\n"COLOR_NONE);
+            break;
+        }
+        case jxx: {
             switch (ifun) {
-                case jmp: { printf("execute jmp\n"); reg[Cnd] = 1; break; }
-                case jle: { printf("execute jle\n");
-                    if ((reg[SF] ^ reg[OF]) || reg[ZF]) {
-                        reg[Cnd] = 1;
+                case jmp: {
+                    Cnd = 1;
+                    printf(GREEN"execute jmp:\t"COLOR_NONE"    ");
+                    printf("Cnd = 1\n");
+                    break;
+                }
+                case jle: {
+                    if ((SF ^ OF) || ZF) {
+                        Cnd = 1;
+                    } else {
+                        Cnd = 0;
                     }
+                    printf(GREEN"execute jle:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; ZF = %d; Cnd = %d\n", SF, OF, ZF, Cnd);
                     break;
                 }
                 case jl: {
-                    printf("execute jl\n");
-                    if (reg[SF] ^ reg[OF]) {
-                        reg[Cnd] = 1;
+                    if (SF ^ OF) {
+                        Cnd = 1;
+                    } else {
+                        Cnd = 0;
                     }
+                    printf(GREEN"execute jl:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; Cnd = %d\n", SF, OF, Cnd);
                     break;
                 }
                 case jge: {
-                    printf("execute jge\n");
-                    if (~(reg[SF] ^ reg[OF])) {
-                        reg[Cnd] = 1;
+                    if (!(SF ^ OF)) {
+                        Cnd = 1;
+                    } else {
+                        Cnd = 0;
                     }
+                    printf(GREEN"execute jge:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; Cnd = %d\n", SF, OF, Cnd);
                     break;
                 }
                 case jg: {
-                    printf("execute jg\n");
-                    if (!(reg[SF] ^ reg[OF]) & !reg[ZF]) {
-                        reg[Cnd] = 1;
+                    if (!(SF ^ OF) & !ZF) {
+                        Cnd = 1;
+                    } else {
+                        Cnd = 0;
                     }
+                    printf(GREEN"execute jg:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; ZF = %d; Cnd = %d\n", SF, OF, ZF, Cnd);
                     break;
                 }
                 case je: {
-                    printf("execute je\n");
-                    if (reg[ZF]) {
-                        reg[Cnd] = 1;
+                    if (ZF) {
+                        Cnd = 1;
+                    } else {
+                        Cnd = 0;
                     }
+                    printf(GREEN"execute je:\t"COLOR_NONE"    ");
+                    printf("ZF = %d; Cnd = %d\n", ZF, Cnd);
                     break;
                 }
                 case jne: {
-                    printf("execute jne\n");
-                    if (!reg[ZF]) {
-                        reg[Cnd] = 1;
+                    if (!ZF) {
+                        Cnd = 1;
+                    } else {
+                        Cnd = 0;
                     }
+                    printf(GREEN"execute jne:\t"COLOR_NONE"    ");
+                    printf("ZF = %d; Cnd = %d\n", ZF, Cnd);
                     break;
                 }
             }
             break;
         }
-        case call:   { printf("execute call\n");   valE = valB - 8;    break; }
-        case irmovl: { printf("execute irmovl\n"); valE = valC;        break; }
-        case rmmovl: { printf("execute rmmovl\n"); valE = valB + valC; break; }
-        case mrmovl: { printf("execute mrmovl\n"); valE = valB + valC; break; }
+        case call: {
+            valE = valB - 8;
+            printf(GREEN"execute call:\t"COLOR_NONE"    ");
+            printf("valE = %lu; valB = %lu\n", valE, valB);
+            break;
+        }
+        case irmovl: {
+            valE = valC;
+            printf(GREEN"execute irmovl:\t"COLOR_NONE"    ");
+            printf("valE = %lu; valC = %lu\n", valE, valC);
+            break;
+        }
+        case rmmovl: {
+            valE = valB + valC;
+            printf(GREEN"execute rmmovl:\t"COLOR_NONE"    ");
+            printf("valE = %lu; valB = %lu; valC = %lu\n", valE, valB, valC);
+            break;
+        }
+        case mrmovl: {
+            valE = valB + valC;
+            printf(GREEN"execute mrmovl:\t"COLOR_NONE"    ");
+            printf("valE = %lu; valB = %lu; valC = %lu\n", valE, valB, valC);
+            break;
+        }
         case cmovxx: {
             switch (ifun) {
-                case rrmovl: { printf("execute rrmovl\n"); valE = valA; ; break; }
-                case cmovle: { printf("execute cmovle\n");
-                    if ((reg[SF] ^ reg[OF]) || reg[ZF]) {
+                case rrmovl: {
+                    valE = valA;
+                    printf(GREEN"execute rrmovl:\t"COLOR_NONE"    ");
+                    printf("valE = %lu; valA = %lu\n", valE, valA);
+                    break;
+                }
+                case cmovle: {
+                    if ((SF ^ OF) || ZF) {
                         valE = valA;
                     }
+                    printf(GREEN"execute cmovle:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; ZF = %d; valE = %lu; valA = %lu\n", SF, OF, ZF, valE, valA);
                     break;
                 }
                 case cmovl: {
-                    printf("execute cmovl\n");
-                    if (reg[SF] ^ reg[OF]) {
+                    if (SF ^ OF) {
                         valE = valA;
                     }
+                    printf(GREEN"execute cmovl:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; valE = %lu; valA = %lu\n", SF, OF, valE, valA);
                     break;
                 }
                 case cmovge: {
-                    printf("execute cmovge\n");
-                    if (~(reg[SF] ^ reg[OF])) {
+                    if (!(SF ^ OF)) {
                         valE = valA;
                     }
+                    printf(GREEN"execute cmovge:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; valE = %lu; valA = %lu\n", SF, OF, valE, valA);
                     break;
                 }
                 case cmovg: {
-                    printf("execute cmovg\n");
-                    if (!(reg[SF] ^ reg[OF]) & !reg[ZF]) {
+                    if (!(SF ^ OF) & !ZF) {
                         valE = valA;
                     }
+                    printf(GREEN"execute cmovg:\t"COLOR_NONE"    ");
+                    printf("SF = %d; OF = %d; ZF = %d; valE = %lu; valA = %lu\n", SF, OF, ZF, valE, valA);
                     break;
                 }
                 case cmove: {
-                    printf("execute cmove\n");
-                    if (reg[ZF]) {
+                    if (ZF) {
                         valE = valA;
                     }
+                    printf(GREEN"execute cmove:\t"COLOR_NONE"    ");
+                    printf("ZF = %d; valE = %lu; valA = %lu\n", ZF, valE, valA);
                     break;
                 }
                 case cmovne: {
-                    printf("execute cmovne\n");
-                    if (!reg[ZF]) {
+                    if (!ZF) {
                         valE = valA;
                     }
+                    printf(GREEN"execute cmovne:\t"COLOR_NONE"    ");
+                    printf("ZF = %d; valE = %lu; valA = %lu\n", ZF, valE, valA);
                     break;
                 }
             }
@@ -305,37 +466,43 @@ void execute() {
 
 void readMemory() {
     switch (icode) {
-        case pushq:  {
-            printf("readMemory pushq\n");
+        case pushq: {
             bigEndian2smailEndian(valE);
             smailValue2eightRamBytes(valS, valE);
+            printf(PURPLE"readMemory pushq:"COLOR_NONE"   ");
+            printf("valE = %lx; valS = %lx\n", valE, valS);
             break;
         }
-        case popq:   {
-            printf("readMemory popq\n");
+        case popq: {
             valE = eightRamBytes2bigValue(valA);
+            printf(PURPLE"readMemory popq:"COLOR_NONE"    ");
+            printf("valE = %lx; valA = %lx\n", valE, valA);
             break;
         }
-        case ret:    {
-            printf("readMemory ret\n");
+        case ret: {
             valM = eightRamBytes2bigValue(valA);
+            printf(PURPLE"readMemory ret:"COLOR_NONE"     ");
+            printf("valM = %lx; valA = %lx\n", valM, valA);
             break;
         }
-        case call:   {
-            printf("readMemory call\n");
+        case call: {
             bigEndian2smailEndian(valP);
             smailValue2eightRamBytes(valS, valE);
+            printf(PURPLE"readMemory call:"COLOR_NONE"    ");
+            printf("valP = %hx; valS = %lx valE = %lx\n", valP, valS, valE);
             break;
         }
         case rmmovl: {
-            printf("readMemory rmmovl\n");
             bigEndian2smailEndian(valE);
             smailValue2eightRamBytes(valS, valE);
+            printf(PURPLE"readMemory rmmovl:"COLOR_NONE"  ");
+            printf("valE = %lx; valS = %lx\n", valE, valS);
             break;
         }
         case mrmovl: {
-            printf("readMemory mrmovl\n");
             valM = eightRamBytes2bigValue(valA);
+            printf(PURPLE"readMemory mrmovl:"COLOR_NONE"  ");
+            printf("valM = %lx; valA = %lx\n", valM, valA);
             break;
         }
     }
@@ -344,44 +511,52 @@ void readMemory() {
 void writeMemory() {
     switch (icode) {
         case op: {
-            printf("writeMemory op\n");
             reg[rB] = valE;
+            printf(DGREEN"writeMemory op:"COLOR_NONE"     ");
+            printf("reg[%lu] = valE = %lu\n", rB, reg[rB]);
             break;
         }
         case pushq: {
-            printf("writeMemory pushq\n");
             reg[rsp] = valE;
+            printf(DGREEN"writeMemory pushq:"COLOR_NONE" ");
+            printf("reg[%d] = valE = %lu\n", rsp, reg[rsp]);
             break;
         }
         case popq: {
-            printf("writeMemory popq\n");
             reg[rsp] = valE;
             reg[rA] = valM;
+            printf(DGREEN"writeMemory popq:"COLOR_NONE"   ");
+            printf("reg[%d] = valE = %lu; reg[%lu] = valM = %lu\n", rsp, reg[rsp], rA, reg[rA]);
             break;
         }
         case call: {
-            printf("writeMemory call\n");
             reg[rsp] = valE;
+            printf(DGREEN"writeMemory call:"COLOR_NONE"   ");
+            printf("reg[%d] = valE = %lu\n", rsp, reg[rsp]);
             break;
         }
         case ret: {
-            printf("writeMemory ret\n");
             reg[rsp] = valE;
+            printf(DGREEN"writeMemory ret:"COLOR_NONE"    ");
+            printf("reg[%d] = valE = %lu\n", rsp, reg[rsp]);
             break;
         }
         case cmovxx: {
-            printf("writeMemory cmovxx\n");
             reg[rB] = valE;
+            printf(DGREEN"writeMemory cmovxx:"COLOR_NONE" ");
+            printf("reg[%lu] = valE = %lu\n", rB, valE);
             break;
         }
         case irmovl: {
-            printf("writeMemory irmovl\n");
             reg[rB] = valE;
+            printf(DGREEN"writeMemory irmovl:"COLOR_NONE" ");
+            printf("reg[%lu] = valE = %lu\n", rB, valE);
             break;
         }
         case mrmovl: {
-            printf("writeMemory mrmovl\n");
             reg[rA] = valM;
+            printf(DGREEN"writeMemory mrmovl:"COLOR_NONE" ");
+            printf("reg[%lu] = valM = %lu\n", rA, valM);
             break;
         }
     }
@@ -396,23 +571,27 @@ void updatePC() {
         case pushq:
         case popq:
         case cmovxx: {
-            printf("updatePC, pc = valP\n");
             pc = valP;
+            printf(BOLD"updatePC:\t"COLOR_NONE"    ");
+            printf("pc = valP = %d\n", valP);
             break;
         }
         case call: {
-            printf("updatePC, pc = valC\n");
             pc = valC;
+            printf(BOLD"updatePC:\t"COLOR_NONE"    ");
+            printf("pc = valC = %lu\n", valC);
             break;
         }
         case ret: {
-            printf("updatePC, pc = valM\n");
             pc = valM;
+            printf(BOLD"updatePC:\t"COLOR_NONE"    ");
+            printf("pc = valM = %lu\n", valM);
             break;
         }
         case jxx: {
-            printf("updatePC, pc = Cnd ? valC : valP\n");
-            pc = reg[Cnd] ? valC : valP;
+            pc = Cnd ? valC : valP;
+            printf(BOLD"updatePC:\t"COLOR_NONE"    ");
+            printf("pc = Cnd ? valC : valP = %hu\n", pc);
             break;
         }
     }
