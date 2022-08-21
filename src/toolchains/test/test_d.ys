@@ -1,0 +1,39 @@
+# Test bench for the yie, traverse all instructions(dead cycle)
+# Execution begins at address 0
+    .pos 0
+    irmovq stack, %rsp  # Set stack pointer
+    call main
+    halt
+
+main:
+    irmovq $4,   %rsi
+    rrmovq %rsi, %rdi
+    rmmovq %rdi, %rax
+    mrmovq (%rax), %rsi
+    addq   %rsi, %rdi
+    subq   %rdi, %rax
+    andq   %rax, %rsi
+    xorq   %rsi, %rdi
+    jmp    test
+    jle    test
+    jge    test
+    jne    test
+    je     test
+    jg     test
+    jl     test
+    cmovle %rdi, %rsi
+    cmovge %rax, %rsi
+    cmovne %rsi, %rdi
+    cmove  %rdi, %rax
+    cmovg  %rsi, %rax
+    cmovl  %rax, %rsi
+    pushq  %rsi
+    popq   %rdi
+    ret
+
+test:
+    nop
+    ret
+
+    .pos 0x400
+stack:
